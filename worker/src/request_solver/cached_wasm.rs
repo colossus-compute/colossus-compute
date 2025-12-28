@@ -1,7 +1,7 @@
 use std::io::Read;
 use std::sync::OnceLock;
 use wasmtime::{Config, Engine, Module, OptLevel};
-use crate::alloc::alloc_zeroed_slice;
+use proto::alloc::alloc_zeroed_slice;
 
 fn decompress_bridge() -> Box<[u8]> {
     const COMPRESSED_WORKER_OBJ: &[u8] =

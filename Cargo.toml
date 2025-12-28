@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["proto", "wasm-bridge", "worker", "worker-bin"]
+members = ["manager-server","proto", "wasm-bridge", "worker", "worker-bin"]
 
 [profile.wasm-bridge]
 inherits = "release"
@@ -13,4 +13,4 @@ strip = true
 
 
 [workspace.dependencies]
-tokio = { version = "1.48.0", features = ["io-util"] }
+anyhow = "1.0.100"
