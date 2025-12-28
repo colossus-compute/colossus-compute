@@ -2,6 +2,11 @@ use std::cmp;
 use std::marker::PhantomData;
 use std::ptr::NonNull;
 
+/// # Safety
+///
+/// * if y := TryInto::<usize>(x) exists TryFrom::<usize>::(y) always succeds
+/// * const MAX: usize represents the biggest size than can fit in this usize
+/// * if the index is <= MAX TryFrom::<usize>::(index) exists
 pub(crate) unsafe trait Length: Sized + Ord + Copy + Send + Sync + 'static + TryFrom<usize> + TryInto<usize> {
     const MAX: usize;
 }

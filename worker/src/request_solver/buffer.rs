@@ -131,7 +131,9 @@ macro_rules! make_load_op {
     ($name: ident, $ty: ty, $from_bytes: ident) => {
         #[inline(always)]
         pub fn $name(&self, index: u32) -> Result<$ty, ()> {
-            self.0.get_n::<{size_of::<$ty>()}>(index).copied().map(<$ty>::$from_bytes)
+            self.0.get_n::<{size_of::<$ty>()}>(index).map(|bytes| {
+                <$ty>::$from_bytes(*bytes)
+            })
         }
     };
 }

@@ -1,3 +1,5 @@
+use tokio::io::AsyncReadExt;
+use tokio::io::AsyncBufRead;
 extern crate core;
 
 use core::slice;
@@ -125,6 +127,10 @@ impl<'a> Request<'a> {
         })
     }
 
+    pub fn name(&self) -> &'a str {
+        self.name.as_str()
+    }
+
     pub fn start(&self) -> u64 {
         self.start
     }
@@ -153,30 +159,39 @@ impl<'a> Request<'a> {
     }
 }
 
-pub fn read_n<R: ?Sized + BufRead>(
-    buffer: &mut Vec<u8>,
-    reader: &mut R,
-    len: usize
-) -> io::Result<Range<usize>> {
-    let Ok(len_64) = u64::try_from(len) else {
-        return Err(io::Error::from(io::ErrorKind::UnexpectedEof))
+
+macro_rules! gen_read_n {
+    ($([async] $({$async: ident})?)? $name: ident($(+ $bound:tt)*)) => {
+        pub $(async $($async)?)? fn $name<R: ?Sized $(+ $bound )+>(
+            buffer: &mut Vec<u8>,
+            reader: &mut R,
+            len: usize
+        ) -> io::Result<Range<usize>> {
+            let Ok(len_64) = u64::try_from(len) else {
+                return Err(io::Error::from(io::ErrorKind::UnexpectedEof))
+            };
+
+            buffer.try_reserve(len)?;
+
+            let start = buffer.len();
+            let n = reader
+                .take(len_64)
+                .read_to_end(buffer)
+                $(.await $($async)?)??;
+
+            if n != len {
+                return Err(io::Error::from(io::ErrorKind::UnexpectedEof))
+            }
+            let end = start + len;
+            assert_eq!(end, buffer.len());
+
+            Ok(start..end)
+        }
     };
-
-    buffer.try_reserve(len)?;
-
-    let start = buffer.len();
-    let n = reader
-        .take(len_64)
-        .read_to_end(buffer)?;
-
-    if n != len {
-        return Err(io::Error::from(io::ErrorKind::UnexpectedEof))
-    }
-    let end = start + len;
-    assert_eq!(end, buffer.len());
-
-    Ok(start..end)
 }
+
+gen_read_n!(read_n(+ BufRead));
+gen_read_n!([async] read_n_async(+ AsyncBufRead + Unpin));
 
 impl<'a> Request<'a> {
     // TODO: use buffer for bufread
@@ -226,6 +241,72 @@ impl<'a> Request<'a> {
         };
 
         Ok(this)
+    }
+
+    pub fn read_slice(mut serialized: &'a [u8]) -> io::Result<Self> {
+        macro_rules! read_int_le {
+            ($reader: expr, $ty:ty) => {{
+                let reader = $reader;
+                reader
+                    .split_first_chunk::<{size_of::<$ty>()}>()
+                    .map(move |(&int, rest)| {
+                        *reader = rest;
+                        <$ty>::from_le_bytes(int)
+                    })
+                    .ok_or_else(|| {
+                        io::Error::from(io::ErrorKind::UnexpectedEof)
+                    })
+            }};
+        }
+
+        let read_n = |reader: &mut &'a [u8], len: usize| {
+            let Some((read, rest)) = reader.split_at_checked(len) else {
+                return Err(io::Error::from(io::ErrorKind::UnexpectedEof))
+            };
+            *reader = rest;
+            Ok(read)
+        };
+
+        let read_u16_bounded = |reader: &mut &'a [u8]| {
+            let len = read_int_le!(&mut *reader, u16)?;
+            read_n(reader, usize::from(len))
+        };
+
+        let name = str::from_utf8(read_u16_bounded(&mut serialized)?)
+            .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?;
+
+        let start = read_int_le!(&mut serialized, u64)?;
+        let length = read_int_le!(&mut serialized, u32)?;
+        let output_length = read_int_le!(&mut serialized, u32)?;
+
+        if start.checked_add(u64::from(length)).is_none() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                RequestCreationError::OutOfRange
+            ))
+        }
+
+        let read_u32_bounded = |reader: &mut &'a [u8]| {
+            let len = read_int_le!(&mut *reader, u32)?;
+            let Ok(len) = usize::try_from(len) else {
+                return Err(io::Error::from(io::ErrorKind::OutOfMemory))
+            };
+
+            read_n(reader, len)
+        };
+
+        let input = read_u32_bounded(&mut serialized)?;
+        let wasm_object = read_u32_bounded(&mut serialized)?;
+
+
+        Ok(Self {
+            name: LimitedStr::new(name).unwrap(),
+            start,
+            length,
+            output_length,
+            input: LimitedSlice::new(input).unwrap(),
+            wasm_object: LimitedSlice::new(wasm_object).unwrap(),
+        })
     }
 
     pub fn write<W: ?Sized + Write>(&self, writer: &mut W) -> io::Result<()> {
@@ -342,26 +423,26 @@ impl<'a> SystemInfo<'a> {
         self.cpu_count
     }
 
-    pub fn read<R: ?Sized + BufRead>(buffer: &'a mut Vec<u8>, reader: &mut R) -> io::Result<Self> {
+    pub async fn read_async<R: ?Sized + AsyncBufRead + Unpin>(buffer: &'a mut Vec<u8>, reader: &mut R) -> io::Result<Self> {
         buffer.clear();
 
-        let read_len = |reader: &mut R| {
+        let read_len = async |reader: &mut R| {
             let mut len = 0_u8;
-            reader.read_exact(slice::from_mut(&mut len)).map(|_| len)
+            reader.read_exact(slice::from_mut(&mut len)).await.map(|_| len)
         };
 
-        let mut read_str = || {
-            let len = usize::from(read_len(reader)?);
-            read_n(buffer, reader, len)
+        let mut read_str = async || {
+            let len = usize::from(read_len(reader).await?);
+            read_n_async(buffer, reader, len).await
         };
 
-        let cpu_name = read_str()?;
-        let cpu_vendor_id = read_str()?;
+        let cpu_name = read_str().await?;
+        let cpu_vendor_id = read_str().await?;
 
-        let mut read_u64 = || reader.read_u64_le().map(NonZero::new);
-        let cpu_freq = read_u64()?;
-        let total_memory = read_u64()?;
-        let cpu_count = reader.read_u32_le().map(NonZero::new)?;
+        let mut read_u64 = async || reader.read_u64_le().await.map(NonZero::new);
+        let cpu_freq = read_u64().await?;
+        let total_memory = read_u64().await?;
+        let cpu_count = reader.read_u32_le().await.map(NonZero::new)?;
 
         let to_str = |range| {
             let str = str::from_utf8(&buffer[range]).map_err(|err| io::Error::new(

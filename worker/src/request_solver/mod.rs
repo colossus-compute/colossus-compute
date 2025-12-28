@@ -582,6 +582,8 @@ r#"
             &input,
             MODULE.as_bytes(),
         );
+        
+        request.as_ref().unwrap().write(&mut std::fs::File::create("request.obj").unwrap()).unwrap();
 
 
         let output = resolve_request(request.unwrap()).unwrap();
