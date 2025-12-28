@@ -1,5 +1,5 @@
 use std::io;
-use std::ops::{Deref, DerefMut, Range};
+use std::ops::Range;
 use tokio::io::{AsyncBufRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 pub struct Request<'a> {
@@ -10,23 +10,6 @@ pub struct Request<'a> {
     input: &'a [u8],
     wasm_object: &'a [u8]
 }
-
-pub struct ResponseBuffer(Box<[u8]>);
-
-impl Deref for ResponseBuffer {
-    type Target = [u8];
-
-    fn deref(&self) -> &Self::Target {
-        &*self.0
-    }
-}
-
-impl DerefMut for ResponseBuffer {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut *self.0
-    }
-}
-
 
 #[derive(Debug, thiserror::Error)]
 pub enum RequestCreationError {
@@ -113,14 +96,8 @@ impl<'a> Request<'a> {
         self.wasm_object
     }
 
-    pub fn make_output_buffer(&self) -> io::Result<ResponseBuffer> {
-        let Ok(len) = usize::try_from(self.output_length) else {
-            return Err(io::Error::from(io::ErrorKind::OutOfMemory))
-        };
-        let mut vec = Vec::new();
-        vec.try_reserve_exact(len)?;
-
-        Ok(ResponseBuffer(vec.into_boxed_slice()))
+    pub fn output_length(&self) -> u32 {
+        self.output_length
     }
 }
 

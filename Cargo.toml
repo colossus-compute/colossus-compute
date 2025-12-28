@@ -1,6 +1,16 @@
 [workspace]
 resolver = "3"
-members = ["proto", "wasm-bridge", "worker"]
+members = ["proto", "wasm-bridge", "worker", "worker-bin"]
+
+[profile.wasm-bridge]
+inherits = "release"
+panic = "abort"
+lto = "fat"
+codegen-units = 1
+incremental = false
+debug = "none"
+strip = true
+
 
 [workspace.dependencies]
 tokio = { version = "1.48.0", features = ["io-util"] }
