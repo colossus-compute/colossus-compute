@@ -167,6 +167,7 @@ pub(super) fn resolve_request(request: Request) -> anyhow::Result<impl Deref<Tar
 
 #[cfg(test)]
 mod test {
+    use rand::{Rng, SeedableRng};
     use super::*;
 
     macro_rules! wat_kernel_raw {
@@ -564,7 +565,7 @@ r#"
         // input u32s -> bytes (LE)
         let input_u32s: Vec<u32> = {
             let mut input = vec![0_u32; n];
-            rand::fill(&mut *input);
+            rand::rngs::SmallRng::from_os_rng().fill(&mut *input);
             input
         };
 
@@ -572,7 +573,6 @@ r#"
         for &v in &input_u32s {
             input.extend_from_slice(&v.to_le_bytes());
         }
-
 
         let request = Request::new(
             "u32->f32 scale add",
