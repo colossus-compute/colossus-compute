@@ -1,0 +1,9 @@
+[package]
+name = "demo"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+proto = { version = "*", path = "../proto" }
+bytemuck = { version = "1.24.0", features = ["extern_crate_std", "must_cast", "must_cast_extra"] }
+ureq = "3.1.4"

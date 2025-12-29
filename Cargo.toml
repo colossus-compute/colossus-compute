@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["manager-server","proto", "wasm-bridge", "worker", "worker-bin"]
+members = ["demo","manager-server","proto", "wasm-bridge", "worker", "worker-bin"]
 
 [profile.wasm-bridge]
 inherits = "release"
