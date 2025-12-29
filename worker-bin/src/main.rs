@@ -13,5 +13,6 @@ struct Args {
 fn main() -> anyhow::Result<()> {
     let args = Args::parse();
     let tcp_connection = TcpStream::connect(args.endpoint)?;
-    worker::run_worker(&mut proto::buf_stream::BufStream::new(tcp_connection))
+    worker::run_worker(&mut proto::buf_stream::BufStream::new(tcp_connection));
+    Ok(())
 }

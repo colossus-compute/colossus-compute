@@ -70,7 +70,7 @@ fn real_main(
 
 
     // use thread spawn for long lived thread
-    std::thread::spawn(move || worker::run_worker(&mut BufStream::new(pipe_sync)).unwrap());
+    std::thread::spawn(move || worker::run_worker(&mut BufStream::new(pipe_sync)));
 
     // spawn in task so it is part of the work stealing queue
     runtime.block_on(async {

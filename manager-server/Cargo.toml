@@ -8,7 +8,6 @@ proto = { version = "*", path = "../proto" }
 worker = { version = "*", path = "../worker" }
 clap = { version = "4.5.53", features = ["derive"] }
 tokio = { workspace = true, features = ["macros", "sync", "net"] }
-pin-project-lite = "0.2.16"
 tokio-util = { version = "0.7.17", features = ["io", "io-util"] }
 serde = { version = "1.0.228", features = ["derive"] }
 futures-lite = "2.6.1"

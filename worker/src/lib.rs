@@ -20,9 +20,12 @@ fn _run_worker(request_stream: &mut dyn BufStream) -> anyhow::Result<()> {
     let mut cnt = 0;
     loop {
         let request = Request::read(&mut request_buffer, request_stream)?;
+        dbg!(request.name(), request.output_length());
         let buffer = request_solver::resolve_request(request)?;
+        eprintln!("resolved request!");
         request_stream.write_all(&buffer)?;
         request_stream.flush()?;
+        request_buffer.clear();
 
         if request_buffer.capacity().div_ceil(4) >= request_buffer.len() {
             if cnt == SRINK_COUNT_TRIGGER_MAX {
@@ -36,6 +39,6 @@ fn _run_worker(request_stream: &mut dyn BufStream) -> anyhow::Result<()> {
 }
 
 #[inline(never)]
-pub fn run_worker(request_stream: &mut (impl BufRead + Write)) -> anyhow::Result<()> {
-    _run_worker(request_stream)
+pub fn run_worker(request_stream: &mut (impl BufRead + Write)) {
+    _run_worker(request_stream).unwrap()
 }

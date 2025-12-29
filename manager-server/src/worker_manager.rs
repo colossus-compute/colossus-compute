@@ -61,6 +61,10 @@ impl OwnedRequest {
             |buffer| Request::read_slice(buffer)
         )
     }
+
+    pub fn name(&self) -> &str {
+        self.with(|x| x.request.name())
+    }
 }
 
 
@@ -227,17 +231,23 @@ impl Worker {
                             }
                         };
 
-                        if let Some((mut request, sender)) = request {
+                        if let Some((request, sender)) = request {
+                            eprintln!("sending '{}' through worker IPC", request.name());
+
                             let stream = &mut stream;
                             let result = async move {
-                                let (write, output_len) = request.with_mut(|request| {
+                                let (write, output_len) = request.with(|request| {
                                     (
                                         stream.write_all(request.buffer),
                                         usize::try_from(request.request.output_length()).map_err(drop)
                                     )
                                 });
+
                                 write.await?;
+                                stream.flush().await?;
                                 drop(request);
+
+
 
                                 let output = output_len.and_then(proto::alloc::try_alloc_zeroed_slice::<u8>);
                                 let Ok(mut output) = output else {
@@ -251,7 +261,7 @@ impl Worker {
                             // we dont care if the reciver recived his request or not
                             // we DO NOT quit early so that the stream isn't
                             // in an inconsistent state
-                            let _ = sender.send(result.await);
+                            let _ = sender.send(result.await.inspect_err(|err| dbg!(err, ()).1));
                         }
 
                         shared.notification.notified().await;
@@ -377,9 +387,11 @@ impl WorkerManager {
                         {
                             let lock = inner_clone.workers.read();
                             let workers = &*lock;
+                            let name = request.name().to_string();
                             for (&id, worker) in workers.iter() {
                                 match worker.shared.submit(request) {
                                     Ok(reciver) => {
+                                        eprintln!("submitted '{name}' to worker work");
                                         clean_workers(&mut workers_that_quit);
                                         break 'outer reciver
                                     },
@@ -451,7 +463,9 @@ impl WorkerManager {
 
     pub async fn run(&self, request: OwnedRequest) -> io::Result<Box<[u8]>> {
         let (tx, rx) = oneshot::channel();
-        self.0.queue.send((request, tx)).expect("worker manager thread should not panic");
+        self.0.queue.send((request, tx))
+            .expect("worker manager thread should not panic");
+
         worker_wait_channel(rx).await
     }
 }

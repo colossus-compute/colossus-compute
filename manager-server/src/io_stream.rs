@@ -1,17 +1,10 @@
 use std::io;
-use std::io::{Error, IoSlice, IoSliceMut, Read, Write};
-use std::pin::Pin;
+use std::io::{IoSlice, IoSliceMut, Read, Write};
 use std::task::{Context, Poll};
-use pin_project_lite::pin_project;
-use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
-pin_project! {
-    pub struct Stream<R, W> {
-        #[pin]
-        read: R,
-        #[pin]
-        write:  W
-    }
+pub struct Stream<R, W> {
+    read: R,
+    write:  W
 }
 
 impl<R, W> Stream<R, W> {

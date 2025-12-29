@@ -1,6 +1,6 @@
 use std::borrow::Cow;
-use std::io;
 use std::io::Read;
+use anyhow::ensure;
 
 pub fn run_raw(
     name: &str,
@@ -9,7 +9,7 @@ pub fn run_raw(
     output_len: u32,
     input: &[u8],
     wasm: &[u8]
-) -> Result<impl Read + use<>, ureq::Error> {
+) -> anyhow::Result<impl Read + use<>> {
     let request = proto::Request::new(
         name,
         start,
@@ -17,18 +17,14 @@ pub fn run_raw(
         output_len,
         input,
         wasm
-    );
-
-    let request = request
-        .map_err(|err| ureq::Error::Other(Box::new(err)))?;
+    )?;
 
     let mut bytes = vec![];
     request.write(&mut bytes)?;
+    dbg!(bytes.len());
 
     eprintln!("sending request...");
-    let request = ureq::post("http://localhost:42371/submit")
-        .send(bytes)?;
-
+    let request = ureq::post("http://localhost:42371/submit").send(bytes)?;
     eprintln!("sent request!");
 
     Ok(request.into_body().into_reader())
@@ -116,11 +112,11 @@ pub fn map_slice<T: ToLeBytes>(
     name: &str,
     slice: &mut [T],
     wasm: &[u8],
-) -> Result<(), ureq::Error> {
-    let length = u32::try_from(slice.len()).unwrap();
+) -> anyhow::Result<()> {
+    let length = u32::try_from(slice.len())?;
     let input = &*T::cast_le_bytes(slice);
     let input_len = size_of_val::<[u8]>(input);
-    let output_len = u32::try_from(input_len).unwrap();
+    let output_len = u32::try_from(input_len)?;
 
     let mut reader = run_raw(
         name,
@@ -133,12 +129,7 @@ pub fn map_slice<T: ToLeBytes>(
 
     let output = bytemuck::must_cast_slice_mut(slice);
     reader.read_exact(output)?;
-    if reader.read(&mut [0])? != 0 {
-        return Err(ureq::Error::Io(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "output was too long"
-        )));
-    }
+    ensure!(reader.read(&mut [0])? == 0, "output longer than requested");
     T::make_le_bytes(slice);
 
     Ok(())

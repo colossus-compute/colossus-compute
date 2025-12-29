@@ -78,6 +78,7 @@ async fn submit(mut body: web::Payload, workers: web::Data<WorkerManager>) -> Ht
         Err(err) => return HttpResponse::BadRequest().body(err.to_string())
     };
 
+    eprintln!("recived: {}", request.name());
     match workers.run(request).await {
         Ok(body) => {
             let header = const {
@@ -85,9 +86,8 @@ async fn submit(mut body: web::Payload, workers: web::Data<WorkerManager>) -> Ht
             };
             HttpResponse::Ok().content_type(header).body(body.into_vec())
         },
-        Err(err) => HttpResponse::from_error(err)
+        Err(err) => HttpResponse::from_error(dbg!(err))
     }
-
 }
 
 
